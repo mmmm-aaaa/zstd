@@ -66,8 +66,24 @@ jobs:
           fi
 
       - name: Publish
-        uses: skx/github-action-publish-binaries@b9ca5643b2f1d7371a6cba7f35333f1461bbc703 # tag=release-2.0
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: artifacts/*
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          : "${GH_TOKEN:?GitHub token is required}" "${RELEASE_ID:?Release ID is required}"
+          shopt -s nullglob
+          assets=(artifacts/*)
+          if (( ${#assets[@]} == 0 )); then
+            echo "No release artifacts found." >&2
+            exit 1
+          fi
+
+          for asset in "${assets[@]}"; do
+            [ -s "$asset" ] || continue
+            gh api --method POST \
+              --header 'Content-Type: application/octet-stream' \
+              --input "$asset" \
+              --raw-field "name=${asset##*/}" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets"
+          done
